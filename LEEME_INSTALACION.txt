@@ -1,0 +1,23 @@
+WYCKOFF BOT 4.5 — PAQUETE COMPLETO (todo lo necesario para arrancar en un repo NUEVO)
+
+CONTENIDO (22 archivos)
+  Bot ........ main.py config.py notify.py edge.py bingx.py universe.py strategy.py wyckoff_engine.py requirements.txt railway.json
+  Variables .. railway.env  (Railway -> Variables -> Raw Editor; rellena key, secret, token y chat id)
+  Medición ... backtest.py sweep.py
+  Tests ...... test_engine.py test_ind.py test_edge.py test_live.py test_universe.py
+  Docs ....... LEEME.txt (qué cambia en la 4.5) ESTRATEGIA.md  .gitignore
+
+NOTA SOBRE universe.py
+  Es una RECONSTRUCCIÓN: no tenía el tuyo. Clasifica cripto / forex / materia prima / acción / índice por el patrón de
+  nombre de BingX (NC<TIPO><ACTIVO>2<DIVISA>-USDT). Con CATEGORIES=crypto (tu configuración) solo importa que NO marque
+  como TradFi a las criptos, y eso está probado (p. ej. NCT-USDT es cripto). Si tu repo ya tenía un universe.py
+  propio y funcionando, sustituye este por el tuyo.
+
+PASOS
+  1. Crea un repo NUEVO y exclusivo para este bot (no lo mezcles con otro: comparten nombres main.py/config.py/bingx.py).
+  2. Sube TODOS los archivos de este zip, descomprimidos y sueltos (no el .zip ni una carpeta).
+  3. Railway: servicio nuevo desde ese repo + volumen montado en /data.
+  4. Variables: pega railway.env y rellena BINGX_API_KEY, BINGX_API_SECRET, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID.
+  5. Antes de operar:  python main.py --preflight   (no envía órdenes: comprueba claves, modo hedge/one-way y volumen).
+  6. Primera prueba: BINGX_VST=true con las claves de la cuenta demo. Después, real con NOTIONAL_USDT pequeño.
+  7. El primer mensaje debe decir: modo LIVE (o SIGNAL), TF 15m,1h, "pausa auto 3h · sombra on".
