@@ -1,0 +1,186 @@
+"""Configuración desde variables de entorno. Todos los parsers quitan comillas (lección de Railway)."""
+import os
+
+CODE_VERSION = "wyckoff-bot 4.5.0-live (2026-10-13)"
+
+
+def _raw(name, default):
+    v = os.getenv(name)
+    if v is None:
+        return default
+    v = v.strip().strip('"').strip("'").strip()
+    return default if v == "" else v
+
+
+def _s(name, default):
+    return str(_raw(name, default))
+
+
+def _f(name, default):
+    try:
+        return float(_raw(name, default))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _i(name, default):
+    try:
+        return int(float(_raw(name, default)))
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _b(name, default):
+    return str(_raw(name, default)).lower() in ("1", "true", "si", "sí", "yes", "on")
+
+
+def _list(name, default=""):
+    v = _s(name, default)
+    return [x.strip().upper() for x in v.split(",") if x.strip()]
+
+
+# ── Modo ──
+MODE = _s("MODE", "SIGNAL").upper()              # SIGNAL = solo avisa · LIVE = opera
+CONFIRM_LIVE = _s("CONFIRM_LIVE", "NO").upper()  # segundo cerrojo: LIVE solo si CONFIRM_LIVE=SI
+LIVE = MODE == "LIVE" and CONFIRM_LIVE in ("SI", "SÍ", "YES")
+VST = _b("BINGX_VST", False)                     # true = cuenta demo VST
+
+# ── BingX ──
+API_KEY = _s("BINGX_API_KEY", "")
+API_SECRET = _s("BINGX_API_SECRET", "")
+
+# ── Telegram ──
+TG_TOKEN = _s("TELEGRAM_TOKEN", "") or _s("TELEGRAM_BOT_TOKEN", "")
+TG_CHAT = _s("TELEGRAM_CHAT_ID", "")
+
+# ── Universo ──
+TIMEFRAMES = [x.strip().lower() for x in _s("TIMEFRAMES", _s("TIMEFRAME", "15m")).split(",") if x.strip()]
+TIMEFRAME = TIMEFRAMES[0]                        # compatibilidad
+SYMBOLS = _list("SYMBOLS", "")                   # vacío = automático
+UNIVERSE = _s("UNIVERSE", "all").lower()         # all = todos los perpetuos · top = los AUTO_TOP_N con más volumen
+AUTO_TOP_N = _i("AUTO_TOP_N", 30)
+MAX_SYMBOLS = _i("MAX_SYMBOLS", 1000)            # tope de seguridad de memoria/peticiones
+CATEGORIES = [x.strip().lower() for x in _s("CATEGORIES", "crypto,forex,commodity,stock,index,tradfi").split(",")]
+MIN_QUOTE_VOL = _f("MIN_QUOTE_VOL", 2_000_000)   # USDT 24h mínimo para cripto
+MIN_QUOTE_VOL_TRADFI = _f("MIN_QUOTE_VOL_TRADFI", 200_000)  # USDT 24h mínimo para TradFi (volumen solo de BingX)
+TRADFI_EFFORT = _s("TRADFI_EFFORT", "volumen").lower()  # volumen | rango (esfuerzo = rango de la vela)
+TRADFI_NO_ENTRY_FRI_UTC = _i("TRADFI_NO_ENTRY_FRI_UTC", 17)  # viernes desde esta hora UTC no abre TradFi (-1 = off)
+ENGINE_KEEP_BARS = _i("ENGINE_KEEP_BARS", 400)   # velas que guarda cada motor (memoria con cientos de símbolos)
+BLACKLIST = _list("BLACKLIST", "")
+WARMUP_BARS = _i("WARMUP_BARS", 1000)            # velas de histórico para reconstruir la estructura
+FETCH_WORKERS = _i("FETCH_WORKERS", 8)           # descargas en paralelo
+UNIVERSE_REFRESH_H = _f("UNIVERSE_REFRESH_H", 6)
+
+# ── Motor Wyckoff ──
+ENTRY_STRICTNESS = _s("ENTRY_STRICTNESS", "Estándar")  # Conservador | Estándar | Agresivo
+if ENTRY_STRICTNESS.lower().startswith("con"):
+    ENTRY_STRICTNESS = "Conservador"
+elif ENTRY_STRICTNESS.lower().startswith("agr"):
+    ENTRY_STRICTNESS = "Agresivo"
+else:
+    ENTRY_STRICTNESS = "Estándar"
+
+# ── Plan y filtros (los del indicador v2) ──
+SL_BUFFER_ATR = _f("SL_BUFFER_ATR", 0.25)
+MIN_RR = _f("MIN_RR", 1.5)                       # R:R mínimo hasta TP2 (0 = sin filtro)
+TREND_FILTER = _s("TREND_FILTER", "aviso").lower()  # off | aviso | bloquea
+TREND_TF = _s("TREND_TF", "1h")
+TREND_EMA = _i("TREND_EMA", 50)
+CONTEXT_TF = _s("CONTEXT_TF", "4h").lower()      # estructura Wyckoff de TF superior (vacío = sin contexto)
+CONTEXT_FILTER = _s("CONTEXT_FILTER", "aviso").lower()  # off | aviso | bloquea (bloquea solo "en contra")
+CONTEXT_WARMUP = _i("CONTEXT_WARMUP", 700)
+CHASE_MAX_R = _f("CHASE_MAX_R", 0.5)             # no perseguir si el precio ya avanzó X R
+MIN_RISK_DIST_PCT = _f("MIN_RISK_DIST_PCT", 0.30)  # stop demasiado cerca: el coste se come la R
+MAX_RISK_DIST_PCT = _f("MAX_RISK_DIST_PCT", 8.0)
+TP1_FRACTION = _f("TP1_FRACTION", 0.5)
+TP2_MULT = _f("TP2_MULT", 1.0)                  # TP2 = altura del rango × esto (1.0 = indicador)
+TRAIL_ATR = _f("TRAIL_ATR", 0.0)                # tras TP1, stop a cierre − X×ATR (0 = off, indicador)
+TIME_STOP_BARS = _i("TIME_STOP_BARS", 0)        # cierra si en N velas no toca TP1 (0 = off, indicador)
+BTC_FILTER = _s("BTC_FILTER", "aviso").lower()  # off | aviso | bloquea: estructura de BTC en CONTEXT_TF (solo cripto)
+MAX_SAME_SIDE = _i("MAX_SAME_SIDE", 0)          # máx. posiciones en la misma dirección (0 = sin tope)
+# ── v4: ideas nuevas ──
+FAIL_TRADES = _s("FAIL_TRADES", "aviso").lower()  # off | aviso | on: operar a los atrapados cuando la estructura se rompe
+FAIL_SL_ATR = _f("FAIL_SL_ATR", 1.0)              # stop de la trampa: nivel duro ± X×ATR
+FAIL_NEEDS_ENTRY = _b("FAIL_NEEDS_ENTRY", False)  # true = solo estructuras que llegaron a dar entrada
+FLOW_SOURCE = _s("FLOW_SOURCE", "binance").lower() # binance | off: compra/venta agresora (no hay en BingX)
+BREADTH_FILTER = _s("BREADTH_FILTER", "aviso").lower()  # off | aviso | bloquea: amplitud Wyckoff en contra
+META_MODEL = _s("META_MODEL", "meta_model.json")  # modelo entrenado con meta.py --guardar
+META_FILTER = _s("META_FILTER", "aviso").lower()  # off | aviso | bloquea (bloquea por debajo del umbral)
+ATTACH_SL = _b("ATTACH_SL", True)               # SL dentro de la orden de entrada (sin ventana desnuda)
+MOVE_SL_TO_BE = _b("MOVE_SL_TO_BE", True)
+
+# ── Riesgo ──
+RISK_PCT = _f("RISK_PCT", 0.5)                   # % del equity arriesgado por operación
+LEVERAGE = _i("LEVERAGE", 5)
+NOTIONAL_USDT = _f("NOTIONAL_USDT", 0.0)         # >0 = tamaño FIJO de posición en USDT (ignora RISK_PCT). 0 = tamaño por riesgo
+SINGLE_TP = _s("SINGLE_TP", "tp1").lower()       # si la posición es tan pequeña que no se puede partir en TP1/TP2: sale entera en tp1 | tp2
+MARGIN_MODE = _s("MARGIN_MODE", "ISOLATED").upper()
+MAX_CONCURRENT = _i("MAX_CONCURRENT", 2)         # posiciones de ESTE bot
+MAX_TOTAL_POSITIONS = _i("MAX_TOTAL_POSITIONS", 4)  # posiciones de TODA la cuenta (otros bots y manuales)
+MAX_DAILY_LOSS_R = _f("MAX_DAILY_LOSS_R", 3.0)
+# ── v4.3: complementos de precisión (off | aviso = solo registra | bloquea). Se activan SOLO si el sweep los valida ──
+ADX_FILTER = _s("ADX_FILTER", "aviso").lower()    # bloquea si ADX > ADX_MAX (reversión contra tendencia fuerte)
+ADX_MAX = _f("ADX_MAX", 30.0)
+ADX_LEN = _i("ADX_LEN", 14)
+DIV_FILTER = _s("DIV_FILTER", "aviso").lower()    # bloquea si el RSI no ha perdido fuerza desde el clímax
+DIV_MIN = _f("DIV_MIN", 5.0)
+RSI_LEN = _i("RSI_LEN", 14)
+AVWAP_FILTER = _s("AVWAP_FILTER", "aviso").lower()  # bloquea si el precio está en contra del VWAP anclado al clímax
+# ── v4.1: cortacircuitos para dinero real (todos pausan las aperturas; lo abierto se sigue gestionando) ──
+MAX_DD_PCT = _f("MAX_DD_PCT", 8.0)                # caída del equity desde su máximo (%) → pausa hasta /reanudar (0 = off)
+MAX_LOSS_STREAK = _i("MAX_LOSS_STREAK", 5)        # pérdidas seguidas → pausa hasta /reanudar (0 = off)
+MAX_SLIP_R = _f("MAX_SLIP_R", 0.35)               # si el relleno real es peor que el plan en más de X R, se cierra al instante (0 = off)
+MAX_LIQ_USE_PCT = _f("MAX_LIQ_USE_PCT", 60.0)     # riesgo_stop% × apalancamiento no puede pasar de esto (el stop debe quedar lejos de la liquidación)
+# ── v4.5: anti-parada, libro sombra y marcador bayesiano de ventaja ──
+AUTO_RESUME = _b("AUTO_RESUME", True)             # las pausas por racha / drawdown se levantan solas tras un enfriamiento
+STREAK_COOLDOWN_H = _f("STREAK_COOLDOWN_H", 3.0)  # horas de pausa tras MAX_LOSS_STREAK
+DD_COOLDOWN_H = _f("DD_COOLDOWN_H", 12.0)         # horas de pausa tras MAX_DD_PCT (al reanudar, el máximo de equity se reinicia)
+RECOVERY_MULT = _f("RECOVERY_MULT", 0.5)          # tras reanudar sola: riesgo × esto...
+RECOVERY_WINS = _i("RECOVERY_WINS", 1)            # ...hasta conseguir N ganadoras...
+RECOVERY_MAX_TRADES = _i("RECOVERY_MAX_TRADES", 4)  # ...o como mucho N operaciones
+AUTO_RESUME_MAX_7D = _i("AUTO_RESUME_MAX_7D", 3)  # tras N reanudaciones automáticas en 7 días, la siguiente pausa es manual
+MIN_EQUITY_USDT = _f("MIN_EQUITY_USDT", 0.0)      # suelo duro: por debajo de este equity, pausa SOLO manual (0 = off)
+SHADOW = _b("SHADOW", True)                       # libro sombra: sigue como virtuales las señales que no se abren
+SHADOW_MAX_OPEN = _i("SHADOW_MAX_OPEN", 60)       # tope de operaciones sombra abiertas a la vez
+SHADOW_MAX_DAYS = _f("SHADOW_MAX_DAYS", 5.0)      # una sombra sin resolver se cierra a precio de mercado tras N días
+EDGE_PRIOR_N = _f("EDGE_PRIOR_N", 20.0)           # peso del a priori (en operaciones) del marcador bayesiano
+EDGE_PRIOR_MEAN_R = _f("EDGE_PRIOR_MEAN_R", 0.0)  # media R a priori (0 = sin ventaja hasta que los datos digan lo contrario)
+EDGE_MUTE = _s("EDGE_MUTE", "aviso").lower()      # off | aviso | on: silencia setups/sesiones con ventaja claramente negativa
+EDGE_MIN_N = _i("EDGE_MIN_N", 20)                 # operaciones mínimas del grupo para poder silenciarlo
+EDGE_MUTE_R = _f("EDGE_MUTE_R", 0.15)             # media posterior por debajo de -X R...
+EDGE_MUTE_T = _f("EDGE_MUTE_T", 1.5)              # ...y t-estadístico ≤ -X
+EDGE_SIZING = _s("EDGE_SIZING", "off").lower()    # off | on: riesgo × (1 + K·media posterior del setup), acotado
+EDGE_SIZING_K = _f("EDGE_SIZING_K", 1.0)
+EDGE_MULT_MIN = _f("EDGE_MULT_MIN", 0.5)
+EDGE_MULT_MAX = _f("EDGE_MULT_MAX", 1.25)
+TRADFI_CLOSE_FRI_UTC = _i("TRADFI_CLOSE_FRI_UTC", 20)  # viernes desde esta hora UTC CIERRA las TradFi abiertas (-1 = off)
+GONE_CONFIRMS = _i("GONE_CONFIRMS", 2)            # ciclos seguidos sin ver la posición antes de darla por cerrada
+REAL_PNL = _b("REAL_PNL", True)                   # R de cada cierre calculada con el PnL real de la cuenta (income de BingX)
+FEE_PCT = _f("FEE_PCT", 0.05)                    # comisión por lado (%) para R neta
+SLIPPAGE_PCT = _f("SLIPPAGE_PCT", 0.03)          # deslizamiento por lado (%) que descuenta el backtest
+
+# ── Operativa ──
+CANDLE_DELAY_S = _i("CANDLE_DELAY_S", 8)         # espera tras el cierre de vela
+MANAGE_EVERY_S = _i("MANAGE_EVERY_S", 30)
+SIGNAL_COOLDOWN_MIN = _i("SIGNAL_COOLDOWN_MIN", 60)
+STATUS_EVERY_H = _f("STATUS_EVERY_H", 12)
+ZOMBIE_ALERT_HOURS = _f("ZOMBIE_ALERT_HOURS", 72)
+IDLE_ALERT_DAYS = _f("IDLE_ALERT_DAYS", 7)
+DATA_DIR = _s("DATA_DIR", "/data" if os.path.isdir("/data") else "./data")
+LOG_LEVEL = _s("LOG_LEVEL", "INFO")
+TG_COMMANDS = _b("TG_COMMANDS", True)            # /estado /posiciones /stats /pausa /reanudar
+
+TF_SECONDS = {"1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "2h": 7200,
+              "4h": 14400, "6h": 21600, "12h": 43200, "1d": 86400}
+
+
+def tf_seconds(tf):
+    return TF_SECONDS.get(tf, 900)
+
+
+def summary():
+    return (f"modo {'LIVE' if LIVE else 'SIGNAL'}{' (VST)' if VST else ''} · TF {','.join(TIMEFRAMES)} · contexto {CONTEXT_TF or '-'} ({CONTEXT_FILTER})"
+            f" · exigencia {ENTRY_STRICTNESS}"
+            f" · {(f'posición fija {NOTIONAL_USDT:g} USDT' if NOTIONAL_USDT > 0 else f'riesgo {RISK_PCT}%')} · x{LEVERAGE} {MARGIN_MODE} · máx {MAX_CONCURRENT} (cuenta {MAX_TOTAL_POSITIONS})"
+            f" · R:R≥{MIN_RR} · tendencia {TREND_FILTER} {TREND_TF}"
+            f" · pausa {'auto ' + format(STREAK_COOLDOWN_H, 'g') + 'h' if AUTO_RESUME else 'manual'} · sombra {'on' if SHADOW else 'off'}")
